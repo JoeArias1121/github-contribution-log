@@ -1,4 +1,4 @@
-# Contribution [#]: [Issue Title]
+# Contribution [7326]: [Dapr Sidecar still Ready when "failed to load components"]
 
 **Contribution Number:** [1 / 2 / 3]  
 **Student:** [Joseph Arias]  
