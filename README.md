@@ -1,4 +1,4 @@
-# Contribution [7326]: [Dapr Sidecar still Ready when "failed to load components"]
+# Contribution 7326: Dapr Sidecar still Ready when "failed to load components"
 
 **Contribution Number:** [1 / 2 / 3]  
 **Student:** [Joseph Arias]  
@@ -9,9 +9,7 @@
 
 ## Why I Chose This Issue
 
-This project caught my attention because it represents the exact bridge I need to transition from fullstack JavaScript development into the Cloud and DevOps space. While my experience is mostly rooted in building end-to-end applications with JavaScript, I am looking to pivot my career toward infrastructure, automation, and cloud-native systems. This project allows me to take my existing understanding of application flow, APIs, and tooling, and apply it directly to the type of backend systems that DevOps teams rely on daily.
-
-My primary learning objective here is to build deep, practical capability in Go, a language that has become the backbone of modern cloud infrastructure. Coming from the JavaScript ecosystem, I am particularly excited to master Go’s strict typing, compilation efficiency, and powerful native concurrency models. Contributing to this repository isn't just about learning a new language, though. For me it is a strategic step to build the technical credibility and open-source visibility required to successfully transition into professional Cloud and DevOps roles.
+This issue targets a critical control-plane vulnerability where the Dapr sidecar incorrectly reports a healthy 200 OK status via its /healthz readiness probe even when foundational infrastructure components fail to initialize on startup. In a production cloud environment, this flaw silently breaks microservice resiliency by tricking orchestrators like Kubernetes into routing live application traffic directly into a broken container. Resolving this lifecycle mismatch bridges my background in fullstack development with my goal to pivot into professional Cloud and DevOps engineering. It provides an active, high-priority arena to master strict typing, advanced error propagation, and systems logic in Go—the backbone language of modern cloud-native automation.
 
 ---
 
