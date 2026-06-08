@@ -9,9 +9,9 @@
 
 ## Why I Chose This Issue
 
-[This project caught my attention because it represents the exact bridge I need to transition from fullstack JavaScript development into the Cloud and DevOps space. While my experience is mostly rooted in building end-to-end applications with JavaScript, I am looking to pivot my career toward infrastructure, automation, and cloud-native systems. This project allows me to take my existing understanding of application flow, APIs, and tooling, and apply it directly to the type of backend systems that DevOps teams rely on daily.
+This project caught my attention because it represents the exact bridge I need to transition from fullstack JavaScript development into the Cloud and DevOps space. While my experience is mostly rooted in building end-to-end applications with JavaScript, I am looking to pivot my career toward infrastructure, automation, and cloud-native systems. This project allows me to take my existing understanding of application flow, APIs, and tooling, and apply it directly to the type of backend systems that DevOps teams rely on daily.
 
-My primary learning objective here is to build deep, practical capability in Go, a language that has become the backbone of modern cloud infrastructure. Coming from the JavaScript ecosystem, I am particularly excited to master Go’s strict typing, compilation efficiency, and powerful native concurrency models. Contributing to this repository isn't just about learning a new language, though. For me it is a strategic step to build the technical credibility and open-source visibility required to successfully transition into professional Cloud and DevOps roles.]
+My primary learning objective here is to build deep, practical capability in Go, a language that has become the backbone of modern cloud infrastructure. Coming from the JavaScript ecosystem, I am particularly excited to master Go’s strict typing, compilation efficiency, and powerful native concurrency models. Contributing to this repository isn't just about learning a new language, though. For me it is a strategic step to build the technical credibility and open-source visibility required to successfully transition into professional Cloud and DevOps roles.
 
 ---
 
