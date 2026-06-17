@@ -37,19 +37,59 @@ This issue targets a critical control-plane vulnerability where the Dapr sidecar
 
 ### Environment Setup
 
-[Notes on setting up your local development environment - challenges you faced, how you solved them]
+When working inside the official VS Code Dev Container, host-to-container directory mount permissions caused Git to flag the workspace as an unsafe repository owned by a different user. Resolved the issue by adding the repository path to the global safe directory list: git config --global --add safe.directory /workspaces/dapr. Go Toolchain Version Mismatch: * Challenge: The repository’s go.mod specifies a requirement of Go >= 1.26.4, but the baseline image bundled inside the development container was running Go 1.24.6, causing compilation blockages. Overrode the local compiler restrictions by explicitly appending the auto-download toolchain flag directly into the compilation pipeline: GOTOOLCHAIN=auto make build -B.
 
 ### Steps to Reproduce
 
-1. [Step 1]
-2. [Step 2]
-3. [Observed result]
+1. Create a local test scenario that completely breaks the secret resolution phase. Inside the ./test-resources folder, create two files: local-secret-store.yaml — Points to a completely missing JSON file to trigger a file-not-found initialization error: apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mystore
+spec:
+  type: secretstores.local.file
+  version: v1
+  metadata:
+  - name: secretsFile
+    value: ./test-resources/non-existent-secrets.json
+
+    broken-component.yaml — A state store dependent on that broken secret store:
+    apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.redis
+  version: v1
+  metadata:
+  - name: redisPassword
+    secretKeyRef:
+      name: mystore
+      key: redis-password
+2. Spin up the Standalone Runtime: Run the freshly compiled runtime binary pointing directly to the defective resources folder: ./dist/linux_amd64/release/daprd --app-id test-app --resources-path ./test-resources --dapr-http-port 3500
+3. The sidecar's component manager registers the failure immediately and triggers an asynchronous graceful shutdown loop. However, instead of blocking execution, the boot logic moves forward. The internal web server opens port 3500 to the host, registers a false-positive status update (dapr initialized. Status: Running.), and exposes a small execution window where any external health check (/healthz) returns a successful 204 No Content code right before the fatal runtime panic executes.
 
 ### Reproduction Evidence
 
-- **Commit showing reproduction:** [Link to commit in your fork]
-- **Screenshots/logs:** [If applicable]
-- **My findings:** [What you discovered during reproduction]
+- **Commit showing reproduction:** [Link to commits showing reproduction](https://github.com/dapr/dapr/compare/master...JoeArias1121:dapr:fix-issue-7326)
+- **Screenshots/logs:** // 1. The core component failure occurs instantly
+ERRO[0000] Failed to init component mystore (secretstores.local.file/v1): open ./test-resources/non-existent-secrets.json: no such file or directory
+WARN[0000] Error processing component, daprd will exit gracefully...
+
+// 2. The HTTP server binds to port 3500 and becomes live despite the failure
+INFO[0000] HTTP server listening on TCP address: :3500
+INFO[0000] HTTP server is running on port 3500
+
+// 3. The false-positive initialization peak occurs
+INFO[0000] dapr initialized. Status: Running. Init Elapsed 90ms
+
+// 4. The asynchronous shutdown finally catches up and crashes the container
+INFO[0000] Dapr is shutting down
+FATA[0000] Fatal error from runtime: process component mystore error: ... open ./test-resources/non-existent-secrets.json: no such file or directory
+- **My findings:** The issue stems from a total decoupling between the runtime's component initialization lifecycle and the HTTP/gRPC server loops inside pkg/runtime/runtime.go.
+
+When a.loadComponents(ctx) faces a terminal component initialization failure, the core processor handles it by scheduling an asynchronous background exit task rather than generating a blocking synchronous error back up to initRuntime. Because execution continues uninterrupted, the HTTP server fires up and responds positively to /healthz traffic.
+
+In production Kubernetes environments, this structural gap creates a critical race condition. If a kubelet readiness probe hits the sidecar during that microsecond timeline window between HTTP binding and the container crash, it interprets the 204 No Content status as total sidecar readiness. Kubernetes then actively routes live user traffic to a container that is actively panicking and dying, resulting in immediately dropped and rejected user requests.
 
 ---
 
@@ -57,7 +97,15 @@ This issue targets a critical control-plane vulnerability where the Dapr sidecar
 
 ### Analysis
 
-[Your analysis of the root cause - what's causing the issue?]
+The flaw exists inside pkg/runtime/runtime.go within func (a *DaprRuntime) initRuntime(...).
+
+The runtime invokes err = a.loadComponents(ctx).
+
+However, the underlying component processor handles initialization errors by logging an error/warning and spinning up an asynchronous background task to kill the runtime gracefully later.
+
+Because this failure is non-blocking to the main initialization thread, initRuntime moves forward uninterrupted, executing err = a.startHTTPServer(ctx).
+
+Since outboundHealthz has no knowledge of the background component failure, the web server answers readiness probes with a successful 204 No Content code before the process dies.
 
 ### Proposed Solution
 
@@ -65,22 +113,37 @@ This issue targets a critical control-plane vulnerability where the Dapr sidecar
 
 ### Implementation Plan
 
-Using UMPIRE framework (adapted):
+Using UMPIRE framework (adapted): 
 
-**Understand:** [Restate the problem]
+**Understand:** When the Dapr sidecar (daprd) boots up with a misconfigured component (e.g., an unreachable database or a missing Kubernetes secret reference), the component initialization fails. However, instead of halting the startup sequence or marking the container as unhealthy, Dapr continues booting. It binds to the HTTP port (3500) and opens its /healthz and /readiness endpoints.
 
-**Match:** [What similar patterns/solutions exist in the codebase?]
+Because the health subsystem does not track the status of component initialization, the health endpoints return a false-positive 204 No Content (success) status code. In a production Kubernetes cluster, kubelet hits this endpoint during that brief window, assumes the sidecar is healthy, and marks the Pod as READY. Traffic is then routed to a container that is actively crashing or completely broken, causing dropped or failed customer requests.
+
+Expected Behavior
+If any critical component fails to initialize during startup, the Dapr sidecar's readiness probe must immediately return a failure status code (e.g., 500 Internal Server Error) to block incoming traffic, and the sidecar should gracefully exit as unready.
+
+**Match:** Inside pkg/runtime/runtime.go, within the initRuntime function, Dapr utilizes a target-based health registry system via a.runtimeConfig.outboundHealthz.
+
+Currently, Dapr registers and tracks individual application readiness like this:
+a.runtimeConfig.outboundHealthz.AddTarget("app").Ready()
+
+The endpoint handler calculates overall readiness by verifying that all registered targets have executed .Ready(). We can mirror this exact pattern by introducing a dedicated lifecycle target for the components subsystem itself.
 
 **Plan:** [Step-by-step implementation plan]
-1. [Modify file X to do Y]
-2. [Add function Z]
-3. [Update tests]
+1. Register Component Health Target: Early in initRuntime, we will register a new health target specifically tracking component loading status: componentTarget := a.runtimeConfig.outboundHealthz.AddTarget("components").
+2. Block Readiness Until Complete: The health probe will naturally fail with an HTTP 500 status as long as this new target is not marked ready.
+3. Signal Success/Failure: If components load and initialize perfectly, we will invoke componentTarget.Ready(). If the component loader returns an error, or if the processor signals a terminal initialization failure, we will leave it unready (or explicitly flag it as failed), ensuring the health endpoints immediately reflect the error state.
 
-**Implement:** [Link to your branch/commits as you work]
+**Implement:** [[Link to your branch/commits as you work]](https://github.com/JoeArias1121/dapr/tree/fix-issue-7326)
 
-**Review:** [Self-review checklist - does it follow the project's contribution guidelines?]
+**Review:** Code Formatting: Run make format to ensure strict compliance with Go styling guidelines.
 
-**Evaluate:** [How will you verify it works?]
+Linting Requirements: Execute make lint to catch static analysis discrepancies.
+
+**Evaluate:** Automated Testing Plan
+Unit Tests: Modify pkg/runtime/runtime_test.go to construct a runtime instance that receives a mocked, broken component provider. Assert that the health endpoint returns a non-200/204 status code when queried during initialization.
+
+Integration Tests: Run existing test pipelines using make test to verify that adding a new target to outboundHealthz does not break actor or app-channel health checks.
 
 ---
 
