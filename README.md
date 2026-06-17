@@ -3,7 +3,7 @@
 **Contribution Number:** [1 / 2 / 3]  
 **Student:** [Joseph Arias]  
 **Issue:** [[GitHub issue link](https://github.com/dapr/dapr/issues/7326)]  
-**Status:** [Phase I Complete/ Phase II / Phase III / Phase IV] [In Progress / Complete]
+**Status:** [Phase I Complete/ Phase II Complete/ Phase III / Phase IV] [In Progress / Complete]
 
 ---
 
@@ -109,7 +109,9 @@ Since outboundHealthz has no knowledge of the background component failure, the 
 
 ### Proposed Solution
 
-[High-level description of your fix approach]
+The fix is all about introducing a gatekeeper to the health subsystem so that the web server cannot lie to Kubernetes while the house is on fire.
+
+Instead of letting the HTTP server boot up and blindly report that everything is fine, we are going to force the health probe to actively wait for the component loading process to finish successfully.
 
 ### Implementation Plan
 
