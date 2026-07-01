@@ -192,15 +192,15 @@ Fixed a segmentation fault panic (SIGSEGV) inside our regression test suite caus
 Decisions made:
 Opted for a "guilty until proven innocent" approach for internal sidecar dependencies. Rather than checking statuses retroactively, the health subsystem structurally blocks external readiness traffic by default until the synchronous subsystem initialization loop explicitly signals completion. Bypassed a localized Makefile linter string constraint conflict by running golangci-lint run ./pkg/runtime directly, confirming complete styling and code quality compliance across all modifications.
 
-### Week [Y] Progress
+### Week [4] Progress
 
 [Continue documenting as you work]
 
 ### Code Changes
 
-- **Files modified:** [List]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files modified:** [runtime_test.go]
+- **Key commits:** [[Links to important commits](https://github.com/dapr/dapr/commit/b904dd073548d7ef662f0264c9195f4372a9c8c5)]
+- **Approach decisions:** Configured a local file secret store pointing to a non-existent file (./test-resources/non-existent-secrets.json). This ensures the component loader encounters an error during the startup/initialization phase. Created a state store component dependent on the broken secret store, simulating a scenario where Dapr fails to load required resources. Used this setup to verify that the Dapr sidecar remains in an unready state when critical component initialization fails, preventing traffic from routing to a malfunctioning sidecar.
 
 ---
 
@@ -208,7 +208,7 @@ Opted for a "guilty until proven innocent" approach for internal sidecar depende
 
 **PR Link:** [GitHub PR URL when submitted]
 
-**PR Description:** [Draft or final PR description - much of the content above can be adapted]
+**PR Description:** This PR addresses a critical race condition in the Dapr sidecar startup sequence where readiness probes could return a false-positive healthy status (200 OK) before all core components finished initializing, or even if component initialization ultimately failed.
 
 **Maintainer Feedback:**
 - [Date]: [Summary of feedback received]
